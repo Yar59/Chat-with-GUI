@@ -38,6 +38,16 @@ def get_arguments():
     return parser.parse_args()
 
 
+def load_chat_history(history_path, messages_queue):
+    try:
+        with open(history_path, 'r') as file:
+            old_messages = file.read()
+        messages_queue.put_nowait(old_messages)
+        logger.debug('Chat history loaded')
+    except FileNotFoundError:
+        logger.debug('Chat history not found')
+
+
 async def send_message(writer, message):
     sanitized_message = message.replace(r"\n", " ")
     logger.debug(f'Sending message: {sanitized_message}')
@@ -104,16 +114,15 @@ async def handle_message_sending(message, chat_host, chat_port, user_token, user
         await writer.wait_closed()
 
 
-async def read_messages(chat_host, chat_port, history_path, queue):
+async def read_messages(chat_host, chat_port, messages_queue, save_messages_queue):
     async with create_chat_connection(chat_host, chat_port) as connection:
         reader, writer = connection
         while not reader.at_eof():
             try:
                 message = await reader.readline()
                 decoded_message = f'[{datetime.now().strftime("%d.%m.%y %H:%M")}] {message.decode()}'
-                queue.put_nowait(decoded_message)
-                async with aiofiles.open(history_path, mode='a') as file:
-                    await file.write(decoded_message)
+                messages_queue.put_nowait(decoded_message)
+                save_messages_queue.put_nowait(decoded_message)
                 await sleep(0)
             except asyncio.CancelledError:
                 logger.debug('Closing connection')
@@ -143,6 +152,13 @@ async def main():
     )
 
     await handle_message_sending(message, chat_host, chat_port, user_token, user_name, hash_path)
+
+
+async def save_messages(history_path, queue):
+    while True:
+        message = await queue.get()
+        async with aiofiles.open(history_path, mode='a') as file:
+            await file.write(message)
 
 
 if __name__ == '__main__':

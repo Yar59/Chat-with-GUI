@@ -2,9 +2,13 @@ import asyncio
 import logging
 
 import gui
-import time
-
-from chat_tools import read_messages, get_arguments, get_token
+from chat_tools import (
+    read_messages,
+    get_arguments,
+    get_token,
+    save_messages,
+    load_chat_history,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +32,13 @@ async def main():
     messages_queue = asyncio.Queue()
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
+    save_messages_queue = asyncio.Queue()
+
+    load_chat_history(history_path, messages_queue)
 
     await asyncio.gather(
-        read_messages(chat_host, chat_port_listen, history_path, messages_queue),
+        read_messages(chat_host, chat_port_listen, messages_queue, save_messages_queue),
+        save_messages(history_path, save_messages_queue),
         gui.draw(messages_queue, sending_queue, status_updates_queue),
     )
 
