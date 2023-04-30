@@ -87,31 +87,43 @@ async def register_user(reader, writer, hash_path, user_name):
         await file.write(decoded_message)
 
 
-async def handle_message_sending(message, chat_host, chat_port, user_token, user_name, hash_path):
+async def handle_message_sending(chat_host, chat_port, user_token, user_name, hash_path, messages_queue, sending_queue):
     async with create_chat_connection(chat_host, chat_port) as connection:
         reader, writer = connection
 
         connection_message = await reader.readline()
         logger.debug(connection_message.decode())
 
-        if user_token is not None:
-            submit_hash_message_payload = await authorize_user(reader, writer, user_token)
-            if submit_hash_message_payload is None:
-                logger.info('Токен недействителен, пройдите регистрацию заново или проверьте его и перезапустите программу')
-                await register_user(reader, writer, hash_path, user_name)
-            else:
-                logger.info(f'Вы авторизованы как {submit_hash_message_payload["nickname"]}')
-        else:
+        if user_token is None:
+
             logger.info('Токен не обнаружен, пройдите регистрацию')
             await send_message(writer, '')
             await register_user(reader, writer, hash_path, user_name)
+            return
 
-        await send_message(writer, message)
-        logger.info(f'Ваше сообщение {message} отправлено')
+        submit_hash_message_payload = await authorize_user(reader, writer, user_token)
+        if submit_hash_message_payload is None:
+            login_message = 'Токен недействителен, пройдите регистрацию заново или проверьте его и перезапустите программу'
+            messages_queue.put_nowait(login_message)
+            logger.info(login_message)
+            await register_user(reader, writer, hash_path, user_name)
+            return
 
-        logger.debug('Close the connection')
-        writer.close()
-        await writer.wait_closed()
+        login_message = f'Вы авторизованы как {submit_hash_message_payload["nickname"]}'
+        messages_queue.put_nowait(login_message)
+        logger.info(login_message)
+
+        while True:
+            message = await sending_queue.get()
+            messages_queue.put_nowait(f'[{datetime.now().strftime("%d.%m.%y %H:%M")}] Вы: {message}\n')
+            await send_message(writer, message)
+            await sleep(0)
+        # await send_message(writer, message)
+        # logger.info(f'Ваше сообщение {message} отправлено')
+        #
+        # logger.debug('Close the connection')
+        # writer.close()
+        # await writer.wait_closed()
 
 
 async def read_messages(chat_host, chat_port, messages_queue, save_messages_queue):

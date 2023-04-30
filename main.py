@@ -8,6 +8,8 @@ from chat_tools import (
     get_token,
     save_messages,
     load_chat_history,
+    handle_message_sending,
+    authorize_user,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,9 +42,18 @@ async def main():
         read_messages(chat_host, chat_port_listen, messages_queue, save_messages_queue),
         save_messages(history_path, save_messages_queue),
         gui.draw(messages_queue, sending_queue, status_updates_queue),
+        handle_message_sending(
+            chat_host,
+            chat_port_write,
+            user_token,
+            user_name,
+            hash_path,
+            messages_queue,
+            sending_queue
+        )
     )
 
 
 if __name__ == '__main__':
-
     asyncio.run(main())
+
