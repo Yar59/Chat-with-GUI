@@ -4,6 +4,7 @@ import json
 import logging
 from asyncio import sleep
 from datetime import datetime
+from tkinter import messagebox
 
 import aiofiles
 from environs import Env
@@ -11,6 +12,10 @@ from environs import Env
 from socket_manager import create_chat_connection
 
 logger = logging.getLogger(__name__)
+
+
+class InvalidToken(Exception):
+    pass
 
 
 def get_arguments():
@@ -95,19 +100,17 @@ async def handle_message_sending(chat_host, chat_port, user_token, user_name, ha
         logger.debug(connection_message.decode())
 
         if user_token is None:
-
-            logger.info('Токен не обнаружен, пройдите регистрацию')
-            await send_message(writer, '')
-            await register_user(reader, writer, hash_path, user_name)
-            return
+            login_message = 'Токен не обнаружен, пройдите регистрацию'
+            logger.info(login_message)
+            messagebox.showinfo('InvalidToken', login_message)
+            raise InvalidToken
 
         submit_hash_message_payload = await authorize_user(reader, writer, user_token)
         if submit_hash_message_payload is None:
             login_message = 'Токен недействителен, пройдите регистрацию заново или проверьте его и перезапустите программу'
-            messages_queue.put_nowait(login_message)
             logger.info(login_message)
-            await register_user(reader, writer, hash_path, user_name)
-            return
+            messagebox.showinfo('InvalidToken', login_message)
+            raise InvalidToken
 
         login_message = f'Вы авторизованы как {submit_hash_message_payload["nickname"]}'
         messages_queue.put_nowait(login_message)
@@ -118,12 +121,6 @@ async def handle_message_sending(chat_host, chat_port, user_token, user_name, ha
             messages_queue.put_nowait(f'[{datetime.now().strftime("%d.%m.%y %H:%M")}] Вы: {message}\n')
             await send_message(writer, message)
             await sleep(0)
-        # await send_message(writer, message)
-        # logger.info(f'Ваше сообщение {message} отправлено')
-        #
-        # logger.debug('Close the connection')
-        # writer.close()
-        # await writer.wait_closed()
 
 
 async def read_messages(chat_host, chat_port, messages_queue, save_messages_queue):

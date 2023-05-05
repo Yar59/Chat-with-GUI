@@ -9,7 +9,7 @@ from chat_tools import (
     save_messages,
     load_chat_history,
     handle_message_sending,
-    authorize_user,
+    InvalidToken,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,5 +55,7 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
-
+    try:
+        asyncio.run(main())
+    except InvalidToken:
+        pass
