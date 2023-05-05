@@ -2,6 +2,8 @@ import asyncio
 import logging
 from datetime import datetime
 
+from async_timeout import timeout
+
 import gui
 from chat_tools import (
     read_messages,
@@ -19,9 +21,13 @@ watchdog_logger = logging.getLogger('watchdog')
 
 async def watch_for_connection(watchdog_queue):
     while True:
-        message = await watchdog_queue.get()
-        message = f'[{datetime.now().timestamp()}]Connection is alive. {message}'
-        watchdog_logger.info(message)
+        try:
+            async with timeout(1) as cm:
+                message = await watchdog_queue.get()
+                message = f'[{datetime.now().timestamp()}] Connection is alive. {message}'
+                watchdog_logger.info(message)
+        except asyncio.exceptions.TimeoutError:
+            watchdog_logger.info(f'[{datetime.now().timestamp()}] 1s timeout is elapsed')
 
 
 async def main():
