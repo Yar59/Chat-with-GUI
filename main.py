@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime
 
 import gui
 from chat_tools import (
@@ -13,6 +14,14 @@ from chat_tools import (
 )
 
 logger = logging.getLogger(__name__)
+watchdog_logger = logging.getLogger('watchdog')
+
+
+async def watch_for_connection(watchdog_queue):
+    while True:
+        message = await watchdog_queue.get()
+        message = f'[{datetime.now().timestamp()}]Connection is alive. {message}'
+        watchdog_logger.info(message)
 
 
 async def main():
@@ -35,22 +44,31 @@ async def main():
     sending_queue = asyncio.Queue()
     status_updates_queue = asyncio.Queue()
     save_messages_queue = asyncio.Queue()
+    watchdog_queue = asyncio.Queue()
 
     load_chat_history(history_path, messages_queue)
 
     await asyncio.gather(
-        read_messages(chat_host, chat_port_listen, messages_queue, save_messages_queue),
+        read_messages(
+            chat_host,
+            chat_port_listen,
+            messages_queue,
+            save_messages_queue,
+            status_updates_queue,
+            watchdog_queue,
+        ),
         save_messages(history_path, save_messages_queue),
         gui.draw(messages_queue, sending_queue, status_updates_queue),
         handle_message_sending(
             chat_host,
             chat_port_write,
             user_token,
-            user_name,
-            hash_path,
             messages_queue,
-            sending_queue
-        )
+            sending_queue,
+            status_updates_queue,
+            watchdog_queue,
+        ),
+        watch_for_connection(watchdog_queue),
     )
 
 

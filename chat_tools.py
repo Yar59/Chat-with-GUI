@@ -9,6 +9,7 @@ from tkinter import messagebox
 import aiofiles
 from environs import Env
 
+from gui import ReadConnectionStateChanged, SendingConnectionStateChanged, NicknameReceived
 from socket_manager import create_chat_connection
 
 logger = logging.getLogger(__name__)
@@ -92,9 +93,19 @@ async def register_user(reader, writer, hash_path, user_name):
         await file.write(decoded_message)
 
 
-async def handle_message_sending(chat_host, chat_port, user_token, user_name, hash_path, messages_queue, sending_queue):
+async def handle_message_sending(
+    chat_host,
+    chat_port,
+    user_token,
+    messages_queue,
+    sending_queue,
+    status_updates_queue,
+    watchdog_queue,
+):
+    status_updates_queue.put_nowait(SendingConnectionStateChanged.INITIATED)
     async with create_chat_connection(chat_host, chat_port) as connection:
         reader, writer = connection
+        status_updates_queue.put_nowait(SendingConnectionStateChanged.ESTABLISHED)
 
         connection_message = await reader.readline()
         logger.debug(connection_message.decode())
@@ -112,26 +123,40 @@ async def handle_message_sending(chat_host, chat_port, user_token, user_name, ha
             messagebox.showinfo('InvalidToken', login_message)
             raise InvalidToken
 
-        login_message = f'Вы авторизованы как {submit_hash_message_payload["nickname"]}'
+        username = NicknameReceived(submit_hash_message_payload["nickname"])
+        status_updates_queue.put_nowait(username)
+        login_message = f'Вы авторизованы как {username.nickname}\n'
         messages_queue.put_nowait(login_message)
+        watchdog_queue.put_nowait('Authorization done')
         logger.info(login_message)
 
         while True:
             message = await sending_queue.get()
             messages_queue.put_nowait(f'[{datetime.now().strftime("%d.%m.%y %H:%M")}] Вы: {message}\n')
             await send_message(writer, message)
+            watchdog_queue.put_nowait('Message sent')
             await sleep(0)
 
 
-async def read_messages(chat_host, chat_port, messages_queue, save_messages_queue):
+async def read_messages(
+    chat_host,
+    chat_port,
+    messages_queue,
+    save_messages_queue,
+    status_updates_queue,
+    watchdog_queue,
+):
+    status_updates_queue.put_nowait(ReadConnectionStateChanged.INITIATED)
     async with create_chat_connection(chat_host, chat_port) as connection:
         reader, writer = connection
+        status_updates_queue.put_nowait(ReadConnectionStateChanged.ESTABLISHED)
         while not reader.at_eof():
             try:
                 message = await reader.readline()
                 decoded_message = f'[{datetime.now().strftime("%d.%m.%y %H:%M")}] {message.decode()}'
                 messages_queue.put_nowait(decoded_message)
                 save_messages_queue.put_nowait(decoded_message)
+                watchdog_queue.put_nowait('New message in chat')
                 await sleep(0)
             except asyncio.CancelledError:
                 logger.debug('Closing connection')
