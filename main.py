@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 
 from async_timeout import timeout
+from anyio import create_task_group
 
 import gui
 from chat_tools import (
@@ -18,6 +19,55 @@ from chat_tools import (
 logger = logging.getLogger(__name__)
 watchdog_logger = logging.getLogger('watchdog')
 
+async def handle_connection(
+    chat_host,
+    chat_port_listen,
+    history_path,
+    sending_queue,
+    chat_port_write,
+    user_token,
+    messages_queue,
+    save_messages_queue,
+    status_updates_queue,
+    watchdog_queue,
+):
+    while True:
+        try:
+            async with create_task_group() as tg:
+                tg.start_soon(
+                    read_messages,
+                    chat_host,
+                    chat_port_listen,
+                    messages_queue,
+                    save_messages_queue,
+                    status_updates_queue,
+                    watchdog_queue,
+                )
+                tg.start_soon(
+                    save_messages,
+                    history_path,
+                    save_messages_queue,
+                )
+                tg.start_soon(
+                    handle_message_sending,
+                    chat_host,
+                    chat_port_write,
+                    user_token,
+                    messages_queue,
+                    sending_queue,
+                    status_updates_queue,
+                    watchdog_queue,
+                )
+                tg.start_soon(
+                    watch_for_connection,
+                    watchdog_queue,
+                )
+
+        except ConnectionError:
+            status_updates_queue.put_nowait(gui.ReadConnectionStateChanged.CLOSED)
+            status_updates_queue.put_nowait(gui.SendingConnectionStateChanged.CLOSED)
+            logger.info('Connection error')
+
 
 async def watch_for_connection(watchdog_queue):
     while True:
@@ -28,6 +78,7 @@ async def watch_for_connection(watchdog_queue):
                 watchdog_logger.info(message)
         except asyncio.exceptions.TimeoutError:
             watchdog_logger.info(f'[{datetime.now().timestamp()}] 1s timeout is elapsed')
+            raise ConnectionError()
 
 
 async def main():
@@ -54,28 +105,26 @@ async def main():
 
     load_chat_history(history_path, messages_queue)
 
-    await asyncio.gather(
-        read_messages(
+    async with create_task_group() as tg:
+        tg.start_soon(
+            gui.draw,
+            messages_queue,
+            sending_queue,
+            status_updates_queue,
+        )
+        tg.start_soon(
+            handle_connection,
             chat_host,
             chat_port_listen,
+            history_path,
+            sending_queue,
+            chat_port_write,
+            user_token,
             messages_queue,
             save_messages_queue,
             status_updates_queue,
             watchdog_queue,
-        ),
-        save_messages(history_path, save_messages_queue),
-        gui.draw(messages_queue, sending_queue, status_updates_queue),
-        handle_message_sending(
-            chat_host,
-            chat_port_write,
-            user_token,
-            messages_queue,
-            sending_queue,
-            status_updates_queue,
-            watchdog_queue,
-        ),
-        watch_for_connection(watchdog_queue),
-    )
+        )
 
 
 if __name__ == '__main__':
