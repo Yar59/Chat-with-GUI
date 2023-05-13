@@ -1,9 +1,10 @@
 import asyncio
 import logging
+import socket
 from datetime import datetime
 
 from async_timeout import timeout
-from anyio import create_task_group
+from anyio import create_task_group, ExceptionGroup
 
 import gui
 from chat_tools import (
@@ -19,6 +20,13 @@ from chat_tools import (
 logger = logging.getLogger(__name__)
 watchdog_logger = logging.getLogger('watchdog')
 
+
+async def ping_pong(sending_queue, ping_delay):
+    while True:
+        sending_queue.put_nowait('')
+        await asyncio.sleep(ping_delay)
+
+
 async def handle_connection(
     chat_host,
     chat_port_listen,
@@ -26,6 +34,8 @@ async def handle_connection(
     sending_queue,
     chat_port_write,
     user_token,
+    connection_timeout,
+    ping_delay,
     messages_queue,
     save_messages_queue,
     status_updates_queue,
@@ -61,24 +71,30 @@ async def handle_connection(
                 tg.start_soon(
                     watch_for_connection,
                     watchdog_queue,
+                    connection_timeout,
                 )
-
-        except ConnectionError:
+                tg.start_soon(
+                    ping_pong,
+                    sending_queue,
+                    ping_delay,
+                )
+        except (ExceptionGroup, ConnectionError, socket.gaierror):
             status_updates_queue.put_nowait(gui.ReadConnectionStateChanged.CLOSED)
             status_updates_queue.put_nowait(gui.SendingConnectionStateChanged.CLOSED)
             logger.info('Connection error')
+            await asyncio.sleep(3)
 
-
-async def watch_for_connection(watchdog_queue):
+async def watch_for_connection(watchdog_queue, connection_timeout):
     while True:
         try:
-            async with timeout(1) as cm:
+            async with timeout(connection_timeout) as cm:
                 message = await watchdog_queue.get()
                 message = f'[{datetime.now().timestamp()}] Connection is alive. {message}'
                 watchdog_logger.info(message)
         except asyncio.exceptions.TimeoutError:
-            watchdog_logger.info(f'[{datetime.now().timestamp()}] 1s timeout is elapsed')
-            raise ConnectionError()
+            if cm.expired:
+                watchdog_logger.info(f'[{datetime.now().timestamp()}] {connection_timeout}s timeout is elapsed')
+                raise ConnectionError()
 
 
 async def main():
@@ -91,6 +107,8 @@ async def main():
     user_name = args.user_name
     log_level = args.logLevel
     history_path = args.history
+    connection_timeout = args.timeout
+    ping_delay = args.ping
 
     logging.basicConfig(
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -120,6 +138,8 @@ async def main():
             sending_queue,
             chat_port_write,
             user_token,
+            connection_timeout,
+            ping_delay,
             messages_queue,
             save_messages_queue,
             status_updates_queue,

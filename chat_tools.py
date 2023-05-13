@@ -21,9 +21,8 @@ class InvalidToken(Exception):
 
 def get_arguments():
     parser = argparse.ArgumentParser(
-        prog='ProgramName',
-        description='What the program does',
-        epilog='Text at the bottom of help',
+        prog='GUI Chat',
+        description='Client for chat',
     )
     parser.add_argument(
         '-l', '--log',
@@ -40,6 +39,8 @@ def get_arguments():
     parser.add_argument('--token', type=str, default=None, help='user auth token')
     parser.add_argument('--user_name', type=str, default=None,
                         help='user name (uses only when token not provided or invalid)')
+    parser.add_argument('--timeout', type=int, default=10, help='connection error timeout')
+    parser.add_argument('--ping', type=int, default=3, help='ping delay')
 
     return parser.parse_args()
 
@@ -52,6 +53,13 @@ def load_chat_history(history_path, messages_queue):
         logger.debug('Chat history loaded')
     except FileNotFoundError:
         logger.debug('Chat history not found')
+
+
+async def handle_chat_reply(reader, watchdog_queue, purpose):
+    raw_message = await reader.readline()
+    decoded_message = raw_message.decode()
+    watchdog_queue.put_nowait(f'Message sent. {purpose}')
+    return decoded_message
 
 
 async def send_message(writer, message):
@@ -132,9 +140,11 @@ async def handle_message_sending(
 
         while True:
             message = await sending_queue.get()
-            messages_queue.put_nowait(f'[{datetime.now().strftime("%d.%m.%y %H:%M")}] Вы: {message}\n')
+            if message != '':
+                messages_queue.put_nowait(f'[{datetime.now().strftime("%d.%m.%y %H:%M")}] Вы: {message}\n')
+                await handle_chat_reply(reader, watchdog_queue, 'User message')
             await send_message(writer, message)
-            watchdog_queue.put_nowait('Message sent')
+            await handle_chat_reply(reader, watchdog_queue, 'Ping-pong')
             await sleep(0)
 
 
@@ -162,38 +172,9 @@ async def read_messages(
                 logger.debug('Closing connection')
                 writer.close()
                 raise
-            except:
-                logger.exception('Проблемы с подключением к серверу сообщений:\n')
-                await sleep(3)
-
-
-async def main():
-    env = Env()
-    env.read_env()
-
-    args = get_arguments()
-    message = args.message
-    chat_host = env('CHAT_HOST') or args.host
-    chat_port = env('CHAT_WRITE_PORT') or args.port
-    hash_path = env('HASH_PATH') or args.hash
-    user_token = env('USER_TOKEN') or args.token or await get_token(hash_path)
-    user_name = env('USER_NAME') or args.user_name
-    log_level = env('LOG_LEVEL') or args.logLevel
-
-    logging.basicConfig(
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        level=getattr(logging, log_level),
-    )
-
-    await handle_message_sending(message, chat_host, chat_port, user_token, user_name, hash_path)
-
 
 async def save_messages(history_path, queue):
     while True:
         message = await queue.get()
         async with aiofiles.open(history_path, mode='a') as file:
             await file.write(message)
-
-
-if __name__ == '__main__':
-    asyncio.run(main())
