@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import json
 import logging
@@ -7,7 +6,6 @@ from datetime import datetime
 from tkinter import messagebox
 
 import aiofiles
-from environs import Env
 
 from gui import ReadConnectionStateChanged, SendingConnectionStateChanged, NicknameReceived
 from socket_manager import create_chat_connection
@@ -17,30 +15,6 @@ logger = logging.getLogger(__name__)
 
 class InvalidToken(Exception):
     pass
-
-
-def get_arguments():
-    parser = argparse.ArgumentParser(
-        prog='GUI Chat',
-        description='Client for chat',
-    )
-    parser.add_argument(
-        '-l', '--log',
-        dest='logLevel',
-        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-        help='Set the logging level',
-        default='INFO',
-    )
-    parser.add_argument('--history', type=str, default='chat_history.txt', help='chat history directory')
-    parser.add_argument('--hash', type=str, default='user_hash.txt', help='user hash path')
-    parser.add_argument('--host', type=str, default='minechat.dvmn.org', help='chat host')
-    parser.add_argument('--port_write', type=int, default=5050, help='write chat port')
-    parser.add_argument('--port_listen', type=int, default=5000, help='listen chat port')
-    parser.add_argument('--token', type=str, default=None, help='user auth token')
-    parser.add_argument('--timeout', type=int, default=10, help='connection error timeout')
-    parser.add_argument('--ping', type=int, default=3, help='ping delay')
-
-    return parser.parse_args()
 
 
 def load_chat_history(history_path, messages_queue):
