@@ -4,3 +4,4 @@ venv/
 __pycache__/
 chat_history.txt
 user_hash.txt
+test.py
