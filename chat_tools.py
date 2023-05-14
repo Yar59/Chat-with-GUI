@@ -87,18 +87,6 @@ async def authorize_user(reader, writer, user_token):
     return submit_hash_message_payload
 
 
-async def register_user(reader, writer, hash_path, user_name):
-    empty_message = await reader.readline()
-    logger.debug(f'why? {empty_message}')
-    user_name = user_name or input('Введите имя пользователя: ')
-    await send_message(writer, user_name)
-    message = await reader.readline()
-    decoded_message = message.decode()
-    logger.info(f'Вы успешно зарегистрированы: {decoded_message}')
-    async with aiofiles.open(hash_path, mode='w') as file:
-        await file.write(decoded_message)
-
-
 async def handle_message_sending(
     chat_host,
     chat_port,
