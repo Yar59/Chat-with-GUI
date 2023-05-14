@@ -84,6 +84,7 @@ async def handle_connection(
             logger.info('Connection error')
             await asyncio.sleep(3)
 
+
 async def watch_for_connection(watchdog_queue, connection_timeout):
     while True:
         try:

@@ -173,6 +173,7 @@ async def read_messages(
                 writer.close()
                 raise
 
+
 async def save_messages(history_path, queue):
     while True:
         message = await queue.get()
