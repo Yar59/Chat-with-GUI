@@ -37,8 +37,6 @@ def get_arguments():
     parser.add_argument('--port_write', type=int, default=5050, help='write chat port')
     parser.add_argument('--port_listen', type=int, default=5000, help='listen chat port')
     parser.add_argument('--token', type=str, default=None, help='user auth token')
-    parser.add_argument('--user_name', type=str, default=None,
-                        help='user name (uses only when token not provided or invalid)')
     parser.add_argument('--timeout', type=int, default=10, help='connection error timeout')
     parser.add_argument('--ping', type=int, default=3, help='ping delay')
 

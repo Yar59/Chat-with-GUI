@@ -105,7 +105,6 @@ async def main():
     chat_port_listen = args.port_listen
     hash_path = args.hash
     user_token = args.token or await get_token(hash_path)
-    user_name = args.user_name
     log_level = args.logLevel
     history_path = args.history
     connection_timeout = args.timeout
