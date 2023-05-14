@@ -44,8 +44,6 @@ def get_arguments():
     parser.add_argument('--hash', type=str, default='user_hash.txt', help='user hash path')
     parser.add_argument('--host', type=str, default='minechat.dvmn.org', help='chat host')
     parser.add_argument('--port', type=int, default=5050, help='write chat port')
-    parser.add_argument('--user_name', type=str, default=None, help='user name')
-    parser.add_argument('--timeout', type=int, default=10, help='connection error timeout')
     return parser.parse_args()
 
 
